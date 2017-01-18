@@ -1,5 +1,10 @@
-# Install Xen 4.2.1 with Remus and DRBD on Ubuntu 12.10
-tested using 3.5.0-23-generic
+# Install Xen 4.2.1 with Remus and DRBD on Ubuntu 12.10 (tested using 3.5.0-23-generic)
+
+Startup Menu -> Boot Menu -> Security -> System Security
+
+Virtualization Technology (VTx) -> Enabled
+
+Virtualization Technology Directed I/O (VTd) -> Enabled
 
 ## Install a new Ubuntu 12.10 system (PC (Intel x86) desktop image)
 Both Servers 
@@ -61,7 +66,7 @@ make world
 make deb
 
 tar zcvf xen-dist.tgz ./xen-4.2.1/dist
-scp ./xen-dist.tgz eross@10.0.1.50:.
+# scp to server #2
 ```
 Server \#2
 ```
@@ -121,15 +126,6 @@ tar zcvf drbd.tgz ./drbd-8.3.11
 
 Server #2
 ```
-tar zxvf ./drbd.tgz
-cd ./drbd-8.3.11
-make install
-cd drbd
-make install
-vi /etc/modules
-# add drbd
-#
-
 tar zxvf ./drbd.tgz
 cd ./drbd-8.3.11
 make install
@@ -249,35 +245,4 @@ remus -i 40 --blackhole --no-net SystemHA dummyHost >/var/log/xen/domU-blackhole
 The VM SystemHA is continuously checkpointed but replicated to `/dev/null`. Gather up all the stats you want and then kill remus
 ```
 pkill -USR1 remus
-```
-
-### Manually installing an HVM Guest VM
-
-```
-sudo lvcreate -L 4G -n ubuntu-hvm /dev/ubuntu
-```
-Create a guest config file `/etc/xen/ubuntu.cfg`
-```
-builder = "hvm"
-name = "ubuntu"
-memory = "512"
-vcpus = 1
-vif = ['mac=18:66:da:03:15:b1,bridge=xenbr0']
-disk = ['phy:/dev/ubuntu/ubuntu-hvm,hda,w','file:/home/cheng/ubuntu-12.04-desktop-amd64.iso,hdc:cdrom,r']
-vnc = 1
-boot="dc"
-```
-
-```
-xm create /etc/xen/ubuntu.cfg
-vncviewer localhost:0 
-```
-
-Once you have installed by formatting the disk and by following the prompts the domain will restart - however this time we want to prevent it booting from DVD so destroy the domain with
-```
-xm destroy ubuntu
-```
-Then change the boot line in the config file to read `boot="c"` restart the domain with
-```
-xm create /etc/xen/ubuntu.cfg
 ```
