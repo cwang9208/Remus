@@ -148,12 +148,12 @@ lvreduce --resizefs --size -50G /dev/ubuntu/root
 
 cp /home/user/drbd-8.3.11/scripts/global_common.conf.protoD /etc/drbd.d/global_common.conf
 cp /home/user/drbd-8.3.11/scripts/testvms_protoD.res /etc/drbd.d/SystemHA_protoD.res
-lvcreate -n drbdtest -L 10G ubuntu
+lvcreate -n test -L 10G ubuntu
 vi /etc/drbd.d/SystemHA_protoD.res
 #
 resource drbd-vm {
         device /dev/drbd1;
-        disk /dev/ubuntu/drbdtest;
+        disk /dev/ubuntu/test;
         meta-disk internal;
         on cheng-HP-Compaq-Elite-8300-SFF {
                 address 147.8.177.50:7791;
@@ -203,35 +203,56 @@ ifb
 ### Test VM with Remus (PV Guest)
 Server #1
 ```
-mkdir -p /var/lib/xen/images/ubuntu-netboot
-cd /var/lib/xen/images/ubuntu-netboot
-wget http://ubuntu.c3sl.ufpr.br/ubuntu/dists/precise/main/installer-amd64/current/images/netboot/xen/initrd.gz
-wget http://ubuntu.c3sl.ufpr.br/ubuntu/dists/precise/main/installer-amd64/current/images/netboot/xen/vmlinuz
+pvcreate /dev/drbd1
+vgcreate drbdtest /dev/drbd1
 
-vi /etc/xen/SystemHA.cfg
-#
-name = "SystemHA"
+xen-create-image Usage:
+      Size / General options:
 
-memory = 256
+       --password=passphrase
+                    Set the root password for the new guest.
 
-disk = [ 'drbd:drbd-vm,xvda,w' ]
-vif = [ 'mac=18:66:da:03:15:b1,bridge=xenbr0' ]
+       --pygrub     DomU should be booted using pygrub.
 
-kernel = "/var/lib/xen/images/ubuntu-netboot/vmlinuz"
-ramdisk = "/var/lib/xen/images/ubuntu-netboot/initrd.gz"
-extra = "debian-installer/exit/always_halt=true -- console=hvc0"
-#
+      Installation options:
 
-xm create /etc/xen/SystemHA.cfg -c
-# run the install
+       --dist=dist  Specify the distribution you wish to install.
 
-vi  /etc/xen/SystemHA.cfg
-# 
-bootloader = "/usr/lib/xen-4.1/bin/pygrub"
-# comment out 'kernel' 'ramdisk' and 'extra'
-#
+      Networking options:
 
-xm create /etc/xen/SystemHA.cfg -c
+       --bridge=brname
+                    Optionally, set a specific bridge for the new instance.
+                    This can be especially useful when running multiple
+                    bridges on a dom0.
+
+       --dhcp       The guest will be configured to fetch its networking
+                    details via DHCP.
+
+       --mac=AA:BB:CC:DD:EE:FF
+                    Specify the MAC address to use for a given interface.
+                    This is only valid for the first IP address specified,
+                    or for DHCP usage.
+
+      Mandatory options:
+
+       --hostname=host.example.org
+                    Set the hostname of the new guest system.
+
+       --lvm=vg     Specify the volume group to save images within.
+
+xen-create-image --hostname=ubuntu \
+  --memory=512mb \
+  --vcpus=2 \
+  --lvm=drbdtest \
+  --dhcp \
+  --pygrub \
+  --dist=precise
+
+# This may take a few minutes, it's running things and downloading in the background
+xl create /etc/xen/ubuntu.cfg -c
+
+# see it running
+xl list
 ```
 Sometimes, for development or analysis purposes, you dont really want to replicate to a physical machine. You just want to gather up the statistics such as number of pages that changed in a checkpoint, size of data sent, etc. In this case, all you need is a system to continuously checkpoint the VM and replicate it to a sink like `/dev/null`, while still gathering up stats.
 ```
@@ -240,7 +261,7 @@ Sometimes, for development or analysis purposes, you dont really want to replica
   --blackhole          replicate to /dev/null (no disk checkpoints, only memory & net buffering)
   --no-net             run without net buffering (benchmark option)
 #
-remus -i 40 --blackhole --no-net SystemHA dummyHost >/var/log/xen/domU-blackhole.log 2>&1 &
+remus -i 40 --blackhole --no-net ubuntu dummyHost >/var/log/xen/domU-blackhole.log 2>&1 &
 ```
 The VM SystemHA is continuously checkpointed but replicated to `/dev/null`. Gather up all the stats you want and then kill remus
 ```
