@@ -1,6 +1,7 @@
-# Install Xen with Remus and DRBD on Ubuntu 12.10
+# Install Xen 4.2.1 with Remus and DRBD on Ubuntu 12.10
+tested using 3.5.0-23-generic
 
-## Install a new Ubuntu 12.10 system
+## Install a new Ubuntu 12.10 system (PC (Intel x86) desktop image)
 Both Servers 
 ```
 Choose 'Use entire disk with LVM'
@@ -140,6 +141,12 @@ vi /etc/modules
 Both Servers
 ```
 lvreduce allows you to reduce the size of a logical volume.
+OPTIONS
+       -L, --size [-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
+              With the - sign the value will be subtracted  from  the  logical
+              volume's actual size.
+       -r, --resizefs
+              Resize underlying filesystem together with  the  logical  volume using fsadm(8).
 
 lvreduce --resizefs --size -50G /dev/ubuntu/root
 
