@@ -183,6 +183,11 @@ drbdadm -- --overwrite-data-of-peer primary drbd-vm
 From `/proc/drbd` you can monitor the current status of the DRBD resource.
 ![drbd](https://github.com/wangchenghku/Remus/blob/master/.resources/drbd.png)
 
+Notes:
+- When Remus is running you can do 'cat /proc/drbd' and you'll notice the status will be Primary/Primary
+- When configuring your VM, use drbd:drbd-vm for the disk. not phy:/… or any other format
+- It's one VM per DRBD disk like this, so you have to create a new one for each VM
+
 ### Setup Remus
 Both servers
 ```
