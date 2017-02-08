@@ -95,12 +95,6 @@ grep Xen /boot/grub/grub.cfg
 sed -i 's/GRUB_DEFAULT=.*\+/GRUB_DEFAULT="Ubuntu GNU\/Linux, with Xen hypervisor"/' /etc/default/grub
 update-grub
 
-# xen-tools gives you some handy scripts for creating guests
-# http://packages.ubuntu.com/quantal/all/xen-tools/filelist
-apt-get install libtext-template-perl libconfig-inifiles-perl libfile-slurp-perl liblist-moreutils-perl
-wget http://mirror.pnl.gov/ubuntu/pool/universe/x/xen-tools/xen-tools_4.3.1-1_all.deb
-dpkg -i xen-tools_4.3.1-1_all.deb
-
 reboot
 ```
 
@@ -181,7 +175,7 @@ Server #1 - this will override all of the DRBD data on server #2
 drbdadm -- --overwrite-data-of-peer primary drbd-vm
 ```
 From `/proc/drbd` you can monitor the current status of the DRBD resource.
-![drbd](https://github.com/wangchenghku/Remus/blob/master/.resources/drbd.png)
+![drbd](https://github.com/wangchenghku/Remus/blob/master/drbd.png)
 
 Notes:
 - When Remus is running you can do 'cat /proc/drbd' and you'll notice the status will be Primary/Primary
@@ -215,56 +209,40 @@ ifb
 ### Test VM with Remus (PV Guest)
 Server #1
 ```
-pvcreate /dev/drbd1
-vgcreate drbdtest /dev/drbd1
+vi /etc/xen/rt.cfg
+#
+name = "rt"
 
-xen-create-image Usage:
-      Size / General options:
+memory = 256
 
-       --password=passphrase
-                    Set the root password for the new guest.
+disk = [ 'drbd:drbd-vm,xvda,w' ]
+vif = [ 'mac=18:66:da:03:15:b1' ]
 
-       --pygrub     DomU should be booted using pygrub.
+kernel = "/var/lib/xen/images/ubuntu-netboot/vmlinuz"
+ramdisk = "/var/lib/xen/images/ubuntu-netboot/initrd.gz"
+extra = "debian-installer/exit/always_halt=true -- console=hvc0"
+#
 
-      Installation options:
+xm create /etc/xen/rt.cfg -c
+# run the install
 
-       --dist=dist  Specify the distribution you wish to install.
+vi  /etc/xen/rt.cfg
+# 
+bootloader = "/usr/lib/xen/bin/pygrub"
+# comment out 'kernel' 'ramdisk' and 'extra'
+#
 
-      Networking options:
-
-       --bridge=brname
-                    Optionally, set a specific bridge for the new instance.
-                    This can be especially useful when running multiple
-                    bridges on a dom0.
-
-       --dhcp       The guest will be configured to fetch its networking
-                    details via DHCP.
-
-       --mac=AA:BB:CC:DD:EE:FF
-                    Specify the MAC address to use for a given interface.
-                    This is only valid for the first IP address specified,
-                    or for DHCP usage.
-
-      Mandatory options:
-
-       --hostname=host.example.org
-                    Set the hostname of the new guest system.
-
-       --lvm=vg     Specify the volume group to save images within.
-
-xen-create-image --hostname=ubuntu \
-  --memory=512mb \
-  --vcpus=2 \
-  --lvm=drbdtest \
-  --dhcp \
-  --pygrub \
-  --dist=precise
-
-# This may take a few minutes, it's running things and downloading in the background
-xl create /etc/xen/ubuntu.cfg -c
+# Press Ctrl+] to exit the console view
+xm create /etc/xen/rt.cfg -c
 
 # see it running
-xl list
+xm list
+
+# reconnect
+xm console rt
+
+# immediately terminate
+xm destroy rt
 ```
 Sometimes, for development or analysis purposes, you dont really want to replicate to a physical machine. You just want to gather up the statistics such as number of pages that changed in a checkpoint, size of data sent, etc. In this case, all you need is a system to continuously checkpoint the VM and replicate it to a sink like `/dev/null`, while still gathering up stats.
 ```
@@ -273,9 +251,14 @@ Sometimes, for development or analysis purposes, you dont really want to replica
   --blackhole          replicate to /dev/null (no disk checkpoints, only memory & net buffering)
   --no-net             run without net buffering (benchmark option)
 #
-remus -i 40 --blackhole --no-net ubuntu dummyHost >/var/log/xen/domU-blackhole.log 2>&1 &
+remus -i 40 --blackhole --no-net rt dummyHost >/var/log/xen/domU-blackhole.log 2>&1 &
 ```
-The VM ubuntu is continuously checkpointed but replicated to `/dev/null`. Gather up all the stats you want and then kill remus
+The VM rt is continuously checkpointed but replicated to `/dev/null`. Gather up all the stats you want and then kill remus
 ```
 pkill -USR1 remus
 ```
+Remus supports most domU guests that can be run in PV, however, you may see this warning when you start Remus: 
+```
+"WARNING: suspend event channel unavailable, falling back to slow xenstore signalling"
+```
+This means the kernel in the guest doesn't have "suspend event channel" support, which in turn basically Remus is going to work, but isn't going to perform well.
