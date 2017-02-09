@@ -232,7 +232,6 @@ bootloader = "/usr/lib/xen/bin/pygrub"
 # comment out 'kernel' 'ramdisk' and 'extra'
 #
 
-# Press Ctrl+] to exit the console view
 xm create /etc/xen/rt.cfg -c
 
 # see it running
