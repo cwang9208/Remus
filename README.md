@@ -158,13 +158,6 @@ resource drbd-vm {
 }
 #
 
-device name
-The name of the block device node of the resource being described.
-You must use this device with your application (file system) and you must not use the low level block device which is specified with the disk parameter.
-
-disk name
-DRBD uses this block device to actually store and retrieve the data. Never access such a device while DRBD is running on top of it.
-
 #Create the meta-data for the SystemHA-disk and then bring up the resource. Do this on both machines
 drbdadm create-md drbd-vm
 ###answer y or yes for all questions, in the above command
