@@ -1,0 +1,94 @@
+## Host (Domain 0) OS Installation
+Before installing Xen Project you will first need to install your domain 0 OS, unless you have already done so.
+
+## Building from Source
+### Build Dependencies
+#### Build Dependencies - Debian / Ubuntu
+
+Under Debian / Ubuntu (and derived distributions) install the *build-essential* package:
+```
+# apt-get install build-essential
+```
+you also need to install these additional debs:
+```
+# apt-get install bcc bin86 gawk bridge-utils iproute libcurl3 libcurl4-openssl-dev bzip2 module-init-tools transfig tgif 
+# apt-get install texinfo texlive-latex-base texlive-latex-recommended texlive-fonts-extra texlive-fonts-recommended pciutils-dev mercurial
+# apt-get install make gcc libc6-dev zlib1g-dev python python-dev python-twisted libncurses5-dev patch libvncserver-dev libsdl-dev libjpeg62-dev
+# apt-get install iasl libbz2-dev e2fslibs-dev git-core uuid-dev ocaml ocaml-findlib libx11-dev bison flex xz-utils libyajl-dev
+# apt-get install gettext libpixman-1-dev libaio-dev markdown pandoc
+```
+And if you're building on Wheezy onward:
+```
+# apt-get install libc6-dev-i386
+```
+One useful shortcut can be to use your distributions package manager to install all the prerequisite packages is to install those packages which are noted as being required to build the distribution's own Xen packages. e.g. under Debian or a Debian derived distribution:
+```
+# apt-get build-dep xen
+```
+However you need to be mindful of new prerequisites added between whatever version of Xen Project software is in your distribution and the version you are building when using this trick.
+
+### Configure
+From Xen Project 4.2 onwards, the software uses the commonly used *autoconf* tool to provide compile time configurability of the toolstack. This allows some control of what features are built into Xen Project, as well as compile time sanity checking. To configure Xen Project, simply run the provided *configure* script: 
+```
+$ ./configure
+```
+#### Library Installation Directory
+Library Installation Directory
+
+Xen Project 4.2 onwards defaults to installing libraries into /usr/lib by default and from 4.3 onwards defaults to installing to /usr/local/lib by default.
+
+Users on systems which use /usr/local/lib64 for 64-bit libraries should use the --libdir option. e.g:
+```
+$ ./configure --libdir=/usr/local/lib64
+```
+Failure to do this usually results in errors about libraries not found or using older versions of the libraries which will likely not work.
+
+#### Python Prefix and Module Layout
+
+On some distros (e.g. Debian and Ubuntu) Xen Project may install the python parts of the code into the wrong place (See Debian bug #693721). Therefore it is necessary to set *PYTHON_PREFIX_ARG=--install-layout=deb*:
+```
+$ cat .config
+PYTHON_PREFIX_ARG=--install-layout=deb
+```
+Some versions of Ubuntu have a bug which requires instead that PYTHON_PREFIX_ARG is to set the empty string: 
+```
+$ cat .config
+PYTHON_PREFIX_ARG=
+```
+As of 4.2 this option is not yet supported by the *configure* script and therefore should still be set via *.config* or on the *make* command line.
+
+The most common symptom of this issue is *pygrub* failing to work, with output similar to: 
+```
+Traceback (most recent call last):
+   File "/usr/lib/xen/bin/pygrub", line 20, in <module>
+     import xen.lowlevel.xc
+ImportError: No module named xen.lowlevel.xc
+```
+### Build & Install
+If you want to rebuild a tree as if from a fresh check then you can use the *world* target. This is effectively the same as *clean* and the *dist*
+```
+$ make world
+```
+To install onto the local machine simply call the *install* target (as root): 
+```
+# make install
+```
+### Linux grub2 update
+When on Linux and using grub2 after installing Xen you will also need to make sure grub2 will pick up your new shiny Xen hypervisor. Distributions differ on how to do this. This section documents how to do this for known distributions. 
+
+#### update grub2 config on Debian
+```
+# update-grub
+```
+### Post-Installation
+When installing Xen Project code from source (.tar.gz) on Debian/Ubuntu, this is how you can enable automatic start of Xen Project services on system startup for SystemV-based init system: 
+
+Required:
+```
+update-rc.d xencommons defaults 19 18
+```
+Optional:
+```
+update-rc.d xendomains defaults 21 20
+update-rc.d xen-watchdog defaults 22 23
+```

@@ -1,0 +1,233 @@
+## Installing Debian
+Boot the Debian Installer CD Insert the Debian CD and configure the CDROM drive as your default boot device in the BIOS or use the system boot menu if your BIOS supports it (usually F12).
+
+You should see a menu, choose the default “Install” option to begin the installation process. Install the system The Debian installer is very straight forward. Follow the prompts until you reach the disk partitioning section.
+
+Choose advanced/custom, we are going to configure a few partitions here, one for /boot another for /, one more for swap and a final partition to setup as an LVM volume group for our guest machines.
+
+First create the /boot partition by choosing the disk and hitting enter, make the partition 300MB and format it as ext2, choose /boot as the mountpoint.
+
+Repeat the process for / but of course changing the mountpoint to / and making it 15GB or so large. Format it as ext3.
+
+Create another partition approximately 1.5x the amount of RAM you have in size and elect to have it used as a swap volume.
+
+Finally create a partition that consumes the rest of the diskspace but don’t format it or assign a mount point.
+
+We should now have a layout that looks like this assuming your disk device is /dev/sda :
+```
+   sda1 - /boot 200MB
+   sda2 - / 15GB
+   sda3 - swap
+   sda4 - reserved for LVM
+```
+
+## Setup LVM storage for guests
+LVM is the Linux Logical Volume manager. It is a technology that allows Linux to manage block devices in a more abstract manner.
+
+LVM introduces the concept of a “logical volume”, effectively a virtualized block device composed of blocks written to 1 or more physical devices. These blocks don’t need to be contiguous unlike proper disk partitions.
+
+Because of this abstraction logical volumes can be created, deleted, resized and even snapshotted without affecting other logical volumes.
+
+LVM creates logical volumes within what is called a volume group, which is simply a set of logical volumes that share the same physical storage, known as physical volumes.
+
+The process of setting up LVM can be summarized as allocating a physical volume, creating a volume group on top of this, then creating logical volumes to store data.
+
+Because of these features and superior performance over file backed virtual machines I recommend the use of LVM if you are going to store VM data locally.
+
+Now lets install LVM and get started!
+
+Install LVM: 
+```
+   apt-get install lvm2
+```
+Now that we have LVM installed let's configure it to use /dev/sda4 as its physical volume 
+```
+   pvcreate /dev/sda4
+```
+Ok, now LVM has somewhere to store its blocks (known as extents for future reference). Let's create a volume group called ‘vg0’ using this physical volume: 
+```
+   vgcreate vg0 /dev/sda4
+```
+Now LVM is setup and initialized so that we can later create logical volumes for our virtual machines.
+
+For the interested below is a number of useful commands and tricks when using LVM.
+
+Create a new logical volume: 
+```
+   lvcreate -n<name of the volume> -L<size, you can use G and M here> <volume group>
+```
+For example, creating a 100 gigabyte volume called database-data on a volume group called vg0. 
+```
+   lvcreate -ndatabase-data -L100G vg0
+```
+## Setup Linux Bridge for guest networking
+Next we need to setup our system so that we can attach virtual machines to the external network. This is done by creating a virtual switch within dom0 that takes packets from the virtual machines and forwards them onto the physical network so they can see the internet and other machines on your network.
+
+The piece of software we use to do this is called the Linux bridge and its core components reside inside the Linux kernel. In this case the “bridge” is effectively our virtual switch. Our Debian kernels are compiled with the Linux bridging module so all we need to do is install the control utilities.
+```
+   apt-get install bridge-utils
+```
+Instead of calling brctl directly we are instead going to configure our bridge through Debian’s networking infrastructure which can be configured via **/etc/network/interfaces**.
+
+Open this file with the editor of your choice. If you selected a minimal installation, the **nano** text editor should already be installed. Open the file: 
+```
+   nano /etc/network/interfaces
+```
+Depending on your hardware you probably see a file pretty similar to this: 
+```
+    auto lo
+    iface lo inet loopback
+
+    auto eth0
+    iface eth0 inet dhcp
+
+```
+This file is very simple. Each stanza represents a single interface. Breaking it down “auto eth0” means that eth0 will be configured when ifup -a is run (which is run a boot time) what this means is that the interface will automatically be started/stopped for you. “iface eth0” then describes the interface itself, in this case it merely specifies that it should be configured by DHCP - we are going to assume that you have DHCP running on your network for this guide. If you are using static addressing you probably know how to set that up. We are going to edit this file so it resembles such: 
+```
+    auto lo
+    iface lo inet loopback
+
+    auto eth0
+    iface eth0 inet manual
+    
+    auto xenbr0
+    iface xenbr0 inet dhcp
+        bridge_ports eth0
+```
+Now restart networking (make sure you have a backup way to access the host if this fails):
+```
+    service network restart
+```
+And check to make sure that it worked:
+```
+    brctl show
+```
+Bridged networking will now start automatically every boot.
+
+## Installing the Xen Project Software
+
+## Creating a Debian PV (Paravirtualized) Guest
+PV guests are notoriously “different” to install. Due to the nature of enlightened systems they don’t have the usual concepts of a CD-ROM drive installer analogous to their physical counterparts. However, luckily enough there are tools that help us prepare “images” or effectively snapshots of the operating systems that are able to run inside of guest domains.
+
+Debian contains a number of tools for creating Xen Project guests. The easiest of which is known as xen-tools. This software suite manages the downloading and installing of guest operating systems including both Debian and RHEL based DomUs. In this guide we are going to use xen-tools to prepare a Debian paravirtualized domU.
+
+Xen-tools can use LVM storage for storing the guest operating systems, in this guide we created the volume group “vg0” in the Setting up LVM Storage section.
+
+When guests are paravirtualized there is no “BIOS” or bootloader resident within the guest filesystem and for a long time guests were provided with kernels external to the guest image. This however is bad for maintainability (guests cannot upgrade their kernels without access to the dom0) and is not as flexible in terms of boot options as they must be passed via the config file.
+
+The Xen Project community wrote a utility known as pygrub which is a python application for PV guests that enables the dom0 to parse the GRUB configuration of the domU and extract its kernel, initrd and boot parameters. This allows for kernel upgrades etc inside of our guest machines along with a GRUB menu. Using pygrub or the stub-dom implementation known as pv-grub is best practice for starting PV guests. In some cases pv-grub is arguably more secure but as it is not included with Debian we won’t use it here though it is recommended in production environments where guests cannot be trusted.
+
+Apart from this PV guests are very similar to their HVM and physical OS counterparts. 
+
+### Configuring xen-tools and building our guest
+First lets install the xen-tools package:
+```
+   apt-get install xen-tools
+```
+We can now create a guest operating system with this tool. It effectively automates the process of setting up a PV guest from scratch right to the point of creating config files and starting the guest. The process can be summarized as follows:
+
+- Create logical volume for rootfs
+- Create logical volume for swap
+- Create filesystem for rootfs
+- Mount rootfs
+- Install operating system using debootstrap (or rinse etc, only debootstrap covered here)
+- Run a series of scripts to generate guest config files like fstab/inittab/menu.lst
+- Create a VM config file for the guest
+- Generate a root password for the guest system
+- Unmount the guest filesystem
+
+These 9 steps can be carried out manually but the manual process is outside the scope of this guide. We instead will execute the below command (for --dist you could in place of Wheezy e.g. use Squeeze, or even Precise or Quantal for a Ubuntu install):
+```
+  xen-create-image --hostname=tutorial-pv-guest \
+  --memory=512mb \
+  --vcpus=2 \
+  --lvm=vg0 \
+  --dhcp \
+  --pygrub \
+  --dist=wheezy
+```
+
+> ```
+>   xen-create-image --hostname=tutorial-pv-guest \
+>   --memory=512mb \
+>   --vcpus=2 \
+>   --lvm=vg0 \
+>   --pygrub \
+>   --dist=trusty
+>   --ip=123.456.789.ABC
+>   --gateway=gw
+>   --bridge=xenbr0
+>   --netmask=123.456.789.ABC
+> ```
+
+This command instructs xen-create-image (the primary binary of the xen-tools toolkit) to create a guest domain with 512MB of memory, 2 vcpus, using storage from the vg0 volume group we created, use DHCP for networking, pygrub to extract the kernel from the image when booted and lastly we specify that we want to deploy a Debian Wheezy operating system.
+
+This process will take a few minutes.
+
+## Starting a console guest
+Here is the command which you can start the guest with (again, for older versions of Xen Project software, replace **xl** with **xm**):
+```
+  xl create -c /etc/xen/tutorial-pv-guest.cfg
+```
+
+> ```
+> #
+> # Configuration file for the Xen instance tutorial-pv-guest, created
+> # by xen-tools 4.4 on Tue Jan 16 17:32:04 2018.
+> #
+> 
+> #
+> #  Kernel + memory size
+> #
+> 
+> 
+> bootloader = '/usr/lib/xen-4.4/bin/pygrub'
+> 
+> vcpus       = '2'
+> memory      = '512'
+> 
+> 
+> #
+> #  Disk device(s).
+> #
+> root        = '/dev/xvda2 ro'
+> disk        = [
+>                   'phy:/dev/vg0/tutorial-pv-guest-disk,xvda2,w',
+>                   'phy:/dev/vg0/tutorial-pv-guest-swap,xvda1,w',
+>               ]
+>
+> 
+> #
+> #  Physical volumes
+> #
+> 
+> 
+> #
+> #  Hostname
+> #
+> name        = 'tutorial-pv-guest'
+> 
+> #
+> #  Networking
+> #
+> dhcp        = 'dhcp'
+> vif         = [ 'mac=00:16:3E:B2:66:08' ]
+> 
+> #
+> #  Behaviour
+> #
+> on_poweroff = 'destroy'
+> on_reboot   = 'restart'
+> on_crash    = 'restart'
+> ```
+
+The -c in this command tells **xl/xm** that we wish to connect to the guest virtual console. Which is a paravirtualised serial port within the domain that xen-create-image configured to listen with a getty. This is analogous to running: 
+```
+  xl create /etc/xen/tutorial-pv-guest.cfg && xl console tutorial-pv-guest
+```
+You can leave the guest virtual console by pressing ctrl+] and re-enter it by running the “xl console <domain>” command.
+
+You can later shutdown this guest either from within the domain or from dom0 with the following: 
+```
+  xl shutdown tutorial-pv-guest
+```
