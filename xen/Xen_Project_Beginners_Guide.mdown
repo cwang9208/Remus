@@ -225,7 +225,7 @@ The -c in this command tells **xl/xm** that we wish to connect to the guest virt
 ```
   xl create /etc/xen/tutorial-pv-guest.cfg && xl console tutorial-pv-guest
 ```
-You can leave the guest virtual console by pressing ctrl+] and re-enter it by running the “xl console <domain>” command.
+You can leave the guest virtual console by pressing ctrl+] and re-enter it by running the “xl console \<domain\>” command.
 
 You can later shutdown this guest either from within the domain or from dom0 with the following: 
 ```
