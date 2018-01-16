@@ -206,13 +206,13 @@ Here is the command which you can start the guest with (again, for older version
 > #  Hostname
 > #
 > name        = 'tutorial-pv-guest'
-
+>
 > #
 > #  Networking
 > #
 > dhcp        = 'dhcp'
 > vif         = [ 'mac=00:16:3E:B2:66:08' ]
-
+> 
 > #
 > #  Behaviour
 > #
